@@ -265,8 +265,7 @@ int add_watches_recursively(int fd, const char* dir_path, const char* target_bas
     return 0;
 }
 
-int copy_file_or_dir(char* source, char* target)
-{
+int copy_file_or_dir(char* source, char* target) {
     struct stat st;
     if (lstat(source, &st) < 0)
     {
@@ -280,22 +279,15 @@ int copy_file_or_dir(char* source, char* target)
         printf("Creating/Updating directory structure: %s\n", target);
         return mkdir(target, st.st_mode);
     }
-    else
-    {
-        printf("Copying file: %s -> %s\n", source, target);
-        copy_file(source, target);
-        return 0;
-    }
+
+    printf("Copying file: %s -> %s\n", source, target);
+    copy_file(source, target);
+    return 0;
 }
 
 void* watcher_thread(void* arg)
 {
-    struct
-    {
-        char source[PATH_MAX];
-        char target[PATH_MAX];
-        BackupManager* mgr;
-    }* data = arg;
+    WatcherArgs* data = arg;
 
     MoveEventTracker* moved_events = malloc(MAX_MOVED_EVENTS * sizeof *moved_events);
     if (!moved_events)

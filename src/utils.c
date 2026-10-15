@@ -2,6 +2,8 @@
 
 #include "utils.h"
 
+#include "watcher_thread.h"
+
 #include <dirent.h>
 #include <errno.h>
 #include <signal.h>
@@ -214,4 +216,63 @@ void free_args(char** args, char* line, int argc)
         free(args);
     }
     free(line);
+}
+
+int prepare_backup_target(Backup* b, char* target)
+{
+    if (!b || !b->source || !target)
+        return -1;
+
+    if (strlen(b->source) >= PATH_MAX || strlen(target) >= PATH_MAX)
+    {
+        errno = ENAMETOOLONG;
+        return -1;
+    }
+
+    // realokacja targets
+    char** new_targets = realloc(b->targets, (b->target_count + 1) * sizeof(char*));
+    if (!new_targets)
+        return -1;
+    b->targets = new_targets;
+
+    // realokacja child_tids
+    pthread_t* new_tids = realloc(b->child_tids, (b->target_count + 1) * sizeof(pthread_t));
+    if (!new_tids)
+        return -1;
+    b->child_tids = new_tids;
+
+    b->targets[b->target_count] = strdup(target);
+    if (!b->targets[b->target_count])
+        return -1;
+
+    return 0;
+}
+
+int start_backup_watcher(BackupManager* mgr, Backup* b, const char* target)
+{
+    // tworzymy watcher w osobnym wątku
+    pthread_t tid;
+    WatcherArgs* watcher_args = malloc(sizeof(*watcher_args));
+    if (!watcher_args)
+        goto fail;
+
+    strcpy(watcher_args->source, b->source);
+    strcpy(watcher_args->target, target);
+    watcher_args->mgr = mgr;
+
+    if (pthread_create(&tid, NULL, watcher_thread, watcher_args) != 0)
+    {
+        free(watcher_args);
+        goto fail;
+    }
+
+    b->child_tids[b->target_count] = tid;
+    b->target_count++;
+
+    return 0;
+
+fail:
+    free(b->targets[b->target_count]);
+    b->targets[b->target_count] = NULL;
+    return -1;
 }

@@ -6,12 +6,14 @@
 #include "utils.h"
 #include "watcher_thread.h"
 
+#include <errno.h>
 #include <limits.h>
 #include <pthread.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/errno.h>
 
 Backup* find_backup(BackupManager* mgr, const char* src)
 {
@@ -28,8 +30,14 @@ Backup* find_backup(BackupManager* mgr, const char* src)
 
 int backup_to_target(BackupManager* mgr, Backup* b, char* target)
 {
-    if (!mgr || !b || !target)
+    if (!mgr || !b || !b->source || !target)
         return -1;
+
+    if (strlen(b->source) >= PATH_MAX || strlen(target) >= PATH_MAX)
+    {
+        errno = ENAMETOOLONG;
+        return -1;
+    }
 
     int nested = is_same_or_subdirectory(b->source, target);
     if (nested < 0)
@@ -48,48 +56,12 @@ int backup_to_target(BackupManager* mgr, Backup* b, char* target)
         return -1;
     }
 
-    // realokacja targets
-    char** new_targets = realloc(b->targets, (b->target_count + 1) * sizeof(char*));
-    if (!new_targets)
-        return -1;
-    b->targets = new_targets;
-
-    // realokacja child_tids
-    pthread_t* new_tids = realloc(b->child_tids, (b->target_count + 1) * sizeof(pthread_t));
-    if (!new_tids)
-        return -1;
-    b->child_tids = new_tids;
-
-    b->targets[b->target_count] = strdup(target);
-    if (!b->targets[b->target_count])
+    if (prepare_backup_target(b, target) == -1)
         return -1;
 
-    // kopiujemy calosc
     copy_recursive(b->source, target, "");
 
-    // tworzymy watcher w osobnym wątku
-    pthread_t tid;
-    struct
-    {
-        char source[PATH_MAX];
-        char target[PATH_MAX];
-        BackupManager* mgr;
-    }* watcher_args = malloc(sizeof(*watcher_args));
-
-    strcpy(watcher_args->source, b->source);
-    strcpy(watcher_args->target, target);
-    watcher_args->mgr = mgr;
-
-    if (pthread_create(&tid, NULL, watcher_thread, watcher_args) != 0)
-    {
-        free(watcher_args);
-        return -1;
-    }
-
-    b->child_tids[b->target_count] = tid;
-    b->target_count++;
-
-    return 0;
+    return start_backup_watcher(mgr, b, target);
 }
 
 void start_backup(BackupManager* mgr, char* src, char** targets, int n)
@@ -119,10 +91,8 @@ void start_backup(BackupManager* mgr, char* src, char** targets, int n)
                     break;
                 }
             }
-            if (backup_exists)
-            {
+            if (backup_exists) {
                 fprintf(stderr, "Backup: %s -> %s already exists.\n", src, targets[i]);
-                continue;
             }
             else
             {  // jesli nie ma to tworzymy
@@ -137,7 +107,18 @@ void start_backup(BackupManager* mgr, char* src, char** targets, int n)
     else
     {  // jesli src jeszcze nie bylo backupowane
         b = malloc(sizeof(Backup));
+        if (!b)
+        {
+            pthread_mutex_unlock(&mgr->state_lock);
+            return;
+        }
         b->source = strdup(src);
+        if (!b->source)
+        {
+            free(b);
+            pthread_mutex_unlock(&mgr->state_lock);
+            return;
+        }
         b->targets = NULL;
         b->child_tids = NULL;
         b->target_count = 0;
@@ -166,6 +147,8 @@ void start_backup(BackupManager* mgr, char* src, char** targets, int n)
         }
         else
         {
+            free(b->targets);
+            free(b->child_tids);
             free(b->source);
             free(b);
         }

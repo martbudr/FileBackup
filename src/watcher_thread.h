@@ -1,11 +1,20 @@
 #ifndef WATCHERTHREAD_H
 #define WATCHERTHREAD_H
 
+#include "backup.h"
+
 #include <limits.h>
 #include <stdint.h>
 
 #define MAX_MOVED_EVENTS 100
 #define MAX_WATCHES 1024
+
+typedef struct WatcherArgs
+{
+    char source[PATH_MAX];
+    char target[PATH_MAX];
+    BackupManager* mgr;
+} WatcherArgs;
 
 typedef struct MoveEventTracker
 {

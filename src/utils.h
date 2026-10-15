@@ -1,6 +1,8 @@
 #ifndef UTILS_H
 #define UTILS_H
 
+#include "backup.h"
+
 #include <signal.h>
 #include <stdbool.h>
 #include <stddef.h>
@@ -24,5 +26,12 @@ bool are_same_dir(char* path1, char* path2);
 int is_same_or_subdirectory(const char* source, const char* target);
 
 void free_args(char** args, char* line, int argc);
+
+// Reserve an uncounted target slot before copying; caller validates destination.
+int prepare_backup_target(Backup* b, char* target);
+
+// Start the watcher and commit the prepared slot; release its string on failure.
+// Call after prepare_backup_target succeeds, with the same backup and target.
+int start_backup_watcher(BackupManager* mgr, Backup* b, const char* target);
 
 #endif
