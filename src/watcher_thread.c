@@ -1,11 +1,18 @@
 #define _GNU_SOURCE
 #include "watcher_thread.h"
 
+#include "backup.h"
+#include "copy.h"
+
 #include <dirent.h>
+#include <errno.h>
+#include <pthread.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
-#include <sys/errno.h>
 #include <sys/inotify.h>
 #include <sys/stat.h>
+#include <unistd.h>
 
 int delete_content(char* path)
 {
@@ -480,7 +487,6 @@ void* watcher_thread(void* arg)
         close(fd);
 
     pthread_cleanup_pop(1);
-    free(moved_events);
 
     return NULL;
 }

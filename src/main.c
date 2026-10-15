@@ -191,8 +191,6 @@ int main(int argc, char** argv)
                 continue;
             }
 
-            cleanup_all_backups(&mgr);
-
             free_args(args, line, arg_cnt);
 
             break;

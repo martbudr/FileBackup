@@ -31,6 +31,18 @@ int backup_to_target(BackupManager* mgr, Backup* b, char* target)
     if (!mgr || !b || !target)
         return -1;
 
+    int nested = is_same_or_subdirectory(b->source, target);
+    if (nested < 0)
+    {
+        perror("Cannot validate backup paths");
+        return -1;
+    }
+    if (nested)
+    {
+        fprintf(stderr, "Destination must not be the source directory or inside it: %s\n", target);
+        return -1;
+    }
+
     if (ensure_empty_dir_or_create(target) == -1)
     {
         return -1;
@@ -172,6 +184,7 @@ void stop_backup_to_targets(BackupManager* mgr, char* src, char** targets, int n
     if (!b)
     {  // target does not exist in backup
         fprintf(stderr, "Failed to stop backup: Backup of %s doesn't exists.\n", src);
+        pthread_mutex_unlock(&mgr->state_lock);
         return;
     }
 
@@ -191,7 +204,7 @@ void stop_backup_to_targets(BackupManager* mgr, char* src, char** targets, int n
             {
                 pthread_cancel(b->child_tids[j]);  // zeby watek sie zakonczyl
 
-                // join
+                // Release the state lock while waiting, then reacquire it before updating records.
                 pthread_mutex_unlock(&mgr->state_lock);
                 pthread_join(b->child_tids[j], NULL);
                 pthread_mutex_lock(&mgr->state_lock);
@@ -206,7 +219,6 @@ void stop_backup_to_targets(BackupManager* mgr, char* src, char** targets, int n
                 b->target_count--;
                 printf("Stopped backup %s -> %s.\n", src, targets[i]);
                 stopped = true;
-                pthread_mutex_unlock(&mgr->state_lock);
                 break;
             }
             if (stopped)

@@ -20,6 +20,9 @@ int ensure_empty_dir_or_create(char* path);
 
 bool are_same_dir(char* path1, char* path2);
 
+// Returns 1 for an equal/nested target, 0 for an outside target, or -1 on error (errno set).
+int is_same_or_subdirectory(const char* source, const char* target);
+
 void free_args(char** args, char* line, int argc);
 
 #endif

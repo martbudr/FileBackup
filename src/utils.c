@@ -114,6 +114,97 @@ bool are_same_dir(char* path1, char* path2)
     return same;
 }
 
+// Resolve existing components through realpath, including symlinks. Missing
+// components are resolved against their parent without creating anything.
+static char* resolve_target_path(const char* path)
+{
+    char* resolved = realpath(path, NULL);
+    if (resolved || errno != ENOENT)
+        return resolved;
+
+    struct stat st;
+    if (lstat(path, &st) == 0)
+    {
+        errno = ENOENT;  // Do not treat a dangling symlink as a missing directory
+        return NULL;
+    }
+    if (errno != ENOENT)
+        return NULL;
+
+    char* copy = strdup(path);
+    if (!copy)
+        return NULL;
+    size_t len = strlen(copy);
+    while (len > 1 && copy[len - 1] == '/')
+        copy[--len] = '\0';
+
+    char* slash = strrchr(copy, '/');
+    const char* name = slash ? slash + 1 : copy;
+    const char* parent = ".";
+    if (slash)
+    {
+        *slash = '\0';
+        parent = slash == copy ? "/" : copy;
+    }
+    char* base = resolve_target_path(parent);
+    if (!base)
+    {
+        int saved_errno = errno;
+        free(copy);
+        errno = saved_errno;
+        return NULL;
+    }
+
+    if (strcmp(name, "..") == 0)
+    {
+        char* last = strrchr(base, '/');
+        if (last == base)
+            base[1] = '\0';
+        else
+            *last = '\0';
+        resolved = base;
+    }
+    else if (strcmp(name, ".") == 0)
+        resolved = base;
+    else
+    {
+        resolved = malloc(strlen(base) + strlen(name) + 2);
+        if (resolved)
+            sprintf(resolved, "%s%s%s", base, strcmp(base, "/") == 0 ? "" : "/", name);
+        free(base);
+    }
+    free(copy);
+    return resolved;
+}
+
+int is_same_or_subdirectory(const char* source, const char* target)
+{
+    if (!source || !target || !*source || !*target)
+    {
+        errno = EINVAL;
+        return -1;
+    }
+    char* source_path = realpath(source, NULL);
+    if (!source_path)
+        return -1;
+    char* target_path = resolve_target_path(target);
+    if (!target_path)
+    {
+        int saved_errno = errno;
+        free(source_path);
+        errno = saved_errno;
+        return -1;
+    }
+
+    size_t len = strlen(source_path);
+    int result = strcmp(source_path, "/") == 0 ||
+                 (strncmp(source_path, target_path, len) == 0 &&
+                  (target_path[len] == '\0' || target_path[len] == '/'));
+    free(source_path);
+    free(target_path);
+    return result;
+}
+
 void free_args(char** args, char* line, int argc)
 {
     if (args)
