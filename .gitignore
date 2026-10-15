@@ -1,0 +1,13 @@
+/.idea/
+.DS_Store
+
+# Build artifacts
+*.o
+/sop-backup
+*.dSYM/
+
+# Local backup test directories
+/from/
+/from[0-9]*/
+/to/
+/to[0-9]*/
