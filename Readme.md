@@ -1,4 +1,4 @@
-# sop-backup
+# File Backup Tool
 
 An interactive directory backup tool written in C17 for Linux. It copies a source directory to one or more destinations, then uses `inotify` and a watcher thread per destination to propagate filesystem changes while the program runs.
 
